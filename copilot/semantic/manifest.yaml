@@ -1,0 +1,354 @@
+# Semantic layer for the Governed Analytics Copilot.
+#
+# This file is the CONTRACT the copilot answers against. The LLM never writes SQL; it emits
+# a structured query plan that references only the metrics/dimensions defined here. The
+# compiler validates the plan against this manifest (an allow-list), then composes SQL,
+# injecting the caller's row-level entitlements. Metric-authored SQL lives in `facts`
+# (trusted); everything from the plan is validated and parameterized.
+#
+# grain entity = account. Every fact exposes `account_id` so dimensions, time, and
+# row-level security compose uniformly.
+
+version: 1
+default_currency: USD
+grain_entity: account
+
+# --- Dimensions -----------------------------------------------------------------------
+# source: account  -> resolved by joining the fact to `accounts a`
+#         fact     -> the fact subquery exposes this column
+#         time     -> a time-grain grouping (month/quarter/year) on the fact's period_date
+dimensions:
+  region:
+    source: account
+    column: region
+    synonyms: [region, geo, geography, area]
+  sub_region:
+    source: account
+    column: sub_region
+    synonyms: [sub region, subregion, territory]
+  segment:
+    source: account
+    column: segment
+    synonyms: [segment, customer size, tier, market segment]
+  country:
+    source: account
+    column: country
+    synonyms: [country, nation]
+  industry:
+    source: account
+    column: "COALESCE(a.industry, 'Unknown')"
+    is_expression: true
+    synonyms: [industry, vertical, sector]
+  account_tier:
+    source: account
+    column: account_tier
+    synonyms: [account tier, strategic, named tier]
+  opp_type:
+    source: fact
+    column: opp_type
+    synonyms: [opportunity type, deal type, motion, sales motion]
+  stage:
+    source: fact
+    column: stage
+    synonyms: [stage, pipeline stage, sales stage]
+  forecast_category:
+    source: fact
+    column: forecast_category
+    synonyms: [forecast category, forecast]
+  feature:
+    source: fact
+    column: feature
+    synonyms: [feature, product area, module]
+  month:
+    source: time
+    grain: month
+    synonyms: [month, monthly, by month, over time, trend]
+  quarter:
+    source: time
+    grain: quarter
+    synonyms: [quarter, quarterly, by quarter, qoq]
+  year:
+    source: time
+    grain: year
+    synonyms: [year, yearly, annually, by year]
+
+# --- Facts (trusted, metric-authored SQL) ---------------------------------------------
+facts:
+  revenue_schedule_fact: |
+    SELECT rs.account_id,
+           CAST(rs.month_start AS DATE) AS period_date,
+           rs.recognized_amount_usd     AS value_usd,
+           rs.plan_name                 AS plan_name
+    FROM revenue_schedule rs
+  sub_events_fact: |
+    SELECT se.account_id,
+           CAST(se.event_date AS DATE)  AS period_date,
+           se.mrr_delta_usd             AS value_usd,
+           se.event_type                AS event_type
+    FROM subscription_events se
+  bookings_fact: |
+    SELECT o.account_id,
+           CAST(o.close_date AS DATE)   AS period_date,
+           o.amount_usd                 AS value_usd,
+           o.opp_type                   AS opp_type,
+           o.is_won                     AS is_won,
+           o.is_closed                  AS is_closed
+    FROM opportunities o
+  pipeline_created_fact: |
+    SELECT o.account_id,
+           CAST(o.created_date AS DATE) AS period_date,
+           o.amount_usd                 AS value_usd,
+           o.opp_type                   AS opp_type
+    FROM opportunities o
+  open_pipeline_fact: |
+    SELECT o.account_id,
+           CAST(o.created_date AS DATE) AS period_date,
+           o.amount_usd                 AS value_usd,
+           o.opp_type                   AS opp_type,
+           o.stage                      AS stage,
+           o.forecast_category          AS forecast_category
+    FROM opportunities o
+    WHERE NOT o.is_closed
+  billings_fact: |
+    SELECT i.account_id,
+           CAST(i.invoice_date AS DATE) AS period_date,
+           i.amount_usd                 AS value_usd,
+           i.invoice_type               AS invoice_type,
+           i.status                     AS status
+    FROM invoices i
+    WHERE i.status <> 'void'
+  net_revenue_fact: |
+    SELECT account_id, CAST(invoice_date AS DATE) AS period_date, amount_usd AS value_usd
+    FROM invoices WHERE status <> 'void'
+    UNION ALL
+    SELECT account_id, CAST(refund_date AS DATE) AS period_date, -amount_usd AS value_usd
+    FROM refunds
+  usage_fact: |
+    SELECT ue.account_id,
+           CAST(ue.event_local_date AS DATE) AS period_date,
+           ue.end_user_id                    AS end_user_id,
+           ue.feature                        AS feature
+    FROM usage_events ue
+
+# --- Metrics --------------------------------------------------------------------------
+# time_mode: range        -> aggregate over a time window on period_date
+#            point_in_time -> value as-of a single month (or per-month if grouped by time)
+#            snapshot      -> current-state fact, no time filter
+# agg: sum | avg | count_rows | count_distinct_account | count_distinct_expr
+metrics:
+  arr:
+    label: ARR
+    category: revenue
+    description: Annual recurring revenue (run-rate) = MRR x 12 at a point in time.
+    synonyms: [arr, annual recurring revenue, run rate, run-rate, recurring revenue]
+    fact: revenue_schedule_fact
+    agg: sum
+    value_column: value_usd
+    value_multiplier: 12
+    time_mode: point_in_time
+    dimensions: [region, sub_region, segment, country, industry, account_tier, month, quarter, year]
+
+  mrr:
+    label: MRR
+    category: revenue
+    description: Monthly recurring revenue at a point in time.
+    synonyms: [mrr, monthly recurring revenue]
+    fact: revenue_schedule_fact
+    agg: sum
+    value_column: value_usd
+    time_mode: point_in_time
+    dimensions: [region, sub_region, segment, country, industry, account_tier, month, quarter, year]
+
+  recognized_revenue:
+    label: Recognized revenue
+    category: revenue
+    description: Straight-line recognized (earned) revenue over a period. Distinct from ARR (run-rate) and bookings (signed).
+    synonyms: [recognized revenue, revenue recognized, earned revenue, gaap revenue]
+    fact: revenue_schedule_fact
+    agg: sum
+    value_column: value_usd
+    time_mode: range
+    dimensions: [region, sub_region, segment, country, industry, month, quarter, year]
+
+  active_customers:
+    label: Active customers
+    category: customers
+    description: Distinct accounts with active recurring revenue at a point in time.
+    synonyms: [active customers, customers, logos, active accounts, customer count]
+    fact: revenue_schedule_fact
+    agg: count_distinct_account
+    time_mode: point_in_time
+    dimensions: [region, sub_region, segment, country, industry, month, quarter, year]
+
+  new_mrr:
+    label: New MRR
+    category: movement
+    description: MRR added from newly acquired subscriptions in the period.
+    synonyms: [new mrr, new business mrr, new bookings mrr]
+    fact: sub_events_fact
+    fact_filter: "event_type = 'new'"
+    agg: sum
+    value_column: value_usd
+    time_mode: range
+    dimensions: [region, segment, industry, month, quarter, year]
+
+  expansion_mrr:
+    label: Expansion MRR
+    category: movement
+    description: MRR added from upsell/expansion of existing customers in the period.
+    synonyms: [expansion mrr, upsell mrr, expansion]
+    fact: sub_events_fact
+    fact_filter: "event_type = 'expansion'"
+    agg: sum
+    value_column: value_usd
+    time_mode: range
+    dimensions: [region, segment, industry, month, quarter, year]
+
+  contraction_mrr:
+    label: Contraction MRR
+    category: movement
+    description: MRR lost from downgrades/contraction (reported as a negative number).
+    synonyms: [contraction mrr, downgrade mrr, contraction]
+    fact: sub_events_fact
+    fact_filter: "event_type = 'contraction'"
+    agg: sum
+    value_column: value_usd
+    time_mode: range
+    dimensions: [region, segment, industry, month, quarter, year]
+
+  churned_mrr:
+    label: Churned MRR
+    category: movement
+    description: MRR lost from churned subscriptions (reported as a negative number).
+    synonyms: [churned mrr, churn mrr, lost mrr, gross churn]
+    fact: sub_events_fact
+    fact_filter: "event_type = 'churn'"
+    agg: sum
+    value_column: value_usd
+    time_mode: range
+    dimensions: [region, segment, industry, month, quarter, year]
+
+  net_new_mrr:
+    label: Net new MRR
+    category: movement
+    description: Net MRR movement = new + expansion + reactivation - contraction - churn.
+    synonyms: [net new mrr, net mrr, net new, net movement]
+    fact: sub_events_fact
+    fact_filter: "event_type IN ('new','expansion','contraction','churn','reactivation')"
+    agg: sum
+    value_column: value_usd
+    time_mode: range
+    dimensions: [region, segment, industry, month, quarter, year]
+
+  bookings:
+    label: Bookings
+    category: pipeline
+    description: Signed ACV of won opportunities (new + expansion + renewal) by close date.
+    synonyms: [bookings, won acv, closed won, signed acv, booked]
+    fact: bookings_fact
+    fact_filter: "is_won"
+    agg: sum
+    value_column: value_usd
+    time_mode: range
+    dimensions: [opp_type, region, segment, industry, month, quarter, year]
+
+  new_business_bookings:
+    label: New business bookings
+    category: pipeline
+    description: Signed ACV of won New Business opportunities by close date.
+    synonyms: [new business bookings, new logo bookings, new business acv]
+    fact: bookings_fact
+    fact_filter: "is_won AND opp_type = 'New Business'"
+    agg: sum
+    value_column: value_usd
+    time_mode: range
+    dimensions: [region, segment, industry, month, quarter, year]
+
+  average_acv:
+    label: Average ACV (new business)
+    category: pipeline
+    description: Average annual contract value of won New Business deals.
+    synonyms: [average acv, avg acv, average deal size, average contract value]
+    fact: bookings_fact
+    fact_filter: "is_won AND opp_type = 'New Business'"
+    agg: avg
+    value_column: value_usd
+    time_mode: range
+    dimensions: [region, segment, industry, month, quarter, year]
+
+  win_rate:
+    label: Win rate (new business)
+    category: pipeline
+    description: Won divided by closed New Business opportunities (count based).
+    synonyms: [win rate, close rate, conversion rate]
+    kind: ratio
+    fact: bookings_fact
+    numerator_filter: "opp_type = 'New Business' AND is_won"
+    denominator_filter: "opp_type = 'New Business' AND is_closed"
+    time_mode: range
+    dimensions: [region, segment, industry, month, quarter, year]
+
+  pipeline_created:
+    label: Pipeline created
+    category: pipeline
+    description: Total opportunity ACV created (by created date).
+    synonyms: [pipeline created, pipeline generation, new pipeline, sourced pipeline]
+    fact: pipeline_created_fact
+    agg: sum
+    value_column: value_usd
+    time_mode: range
+    dimensions: [opp_type, region, segment, month, quarter, year]
+
+  open_pipeline:
+    label: Open pipeline
+    category: pipeline
+    description: ACV of currently open (not closed) opportunities.
+    synonyms: [open pipeline, current pipeline, pipeline coverage, open opportunities]
+    fact: open_pipeline_fact
+    agg: sum
+    value_column: value_usd
+    time_mode: snapshot
+    dimensions: [stage, forecast_category, opp_type, region, segment]
+
+  gross_billings:
+    label: Gross billings
+    category: revenue
+    description: Invoiced amount (USD) excluding voided invoices, by invoice date.
+    synonyms: [billings, gross billings, invoiced, invoices]
+    fact: billings_fact
+    agg: sum
+    value_column: value_usd
+    time_mode: range
+    dimensions: [region, segment, industry, month, quarter, year]
+
+  net_revenue:
+    label: Net revenue
+    category: revenue
+    description: Billings net of refunds/credits (gross - refunds).
+    synonyms: [net revenue, revenue net of refunds, net billings]
+    fact: net_revenue_fact
+    agg: sum
+    value_column: value_usd
+    time_mode: range
+    dimensions: [region, segment, industry, month, quarter, year]
+
+  mau:
+    label: Monthly active users
+    category: usage
+    description: Distinct end users active in a month (by local date).
+    synonyms: [mau, monthly active users, active users]
+    fact: usage_fact
+    agg: count_distinct_expr
+    count_expr: end_user_id
+    time_mode: point_in_time
+    dimensions: [region, segment, feature, month, quarter, year]
+
+  active_usage_accounts:
+    label: Active usage accounts
+    category: usage
+    description: Distinct accounts with any product usage in a month.
+    synonyms: [active usage accounts, accounts using product, engaged accounts]
+    fact: usage_fact
+    agg: count_distinct_account
+    time_mode: point_in_time
+    dimensions: [region, segment, month, quarter, year]
