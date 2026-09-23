@@ -1,0 +1,7 @@
+# Synthetic data generator for the Governed Analytics Copilot
+numpy>=1.26
+pandas>=2.1
+duckdb>=1.0
+pyarrow>=14.0
+faker>=25.0
+PyYAML>=6.0
