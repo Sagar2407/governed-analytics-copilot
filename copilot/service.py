@@ -9,10 +9,40 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+import numpy as np
+import pandas as pd
+
 from .engine import Engine
 from .planner.base import Planner
 from .planner.heuristic import HeuristicPlanner
 from .security.principal import Principal
+
+
+def _native(v):
+    """Convert numpy / pandas scalars to JSON-serializable Python types.
+
+    DuckDB -> pandas gives numpy ints/floats and pandas Timestamps (e.g. a `quarter`
+    dimension), none of which the default JSON encoder can serialize. Normalizing here
+    keeps the API responses valid for both scalar and grouped results.
+    """
+    if v is None:
+        return None
+    if isinstance(v, np.integer):
+        return int(v)
+    if isinstance(v, np.floating):
+        f = float(v)
+        return None if pd.isna(f) else f
+    if isinstance(v, (pd.Timestamp, np.datetime64)):
+        return pd.Timestamp(v).date().isoformat()
+    if isinstance(v, np.bool_):
+        return bool(v)
+    if isinstance(v, float) and pd.isna(v):
+        return None
+    return v
+
+
+def _safe_records(df: pd.DataFrame) -> list[dict]:
+    return [{k: _native(val) for k, val in rec.items()} for rec in df.to_dict("records")]
 
 
 @dataclass
@@ -64,6 +94,6 @@ class Copilot:
         return Response(
             status="ok", question=question, persona=principal.label,
             rationale=pr.rationale, answer=answer, value_kind=res.value_kind,
-            columns=list(res.rows.columns), rows=res.rows.to_dict(orient="records"),
+            columns=list(res.rows.columns), rows=_safe_records(res.rows),
             plan=pr.plan.to_dict(), sql=res.sql, lineage=res.lineage,
         )

@@ -18,6 +18,7 @@ import os
 import threading
 import time
 from collections import defaultdict, deque
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -37,24 +38,27 @@ ALLOWED_ORIGINS = os.environ.get(
     "http://localhost:8000,http://127.0.0.1:8000").split(",")
 STATIC_DIR = Path(__file__).with_name("static")
 
-app = FastAPI(title="Governed Analytics Copilot", version="1.0",
-              docs_url="/api/docs", redoc_url=None)
-app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS,
-                   allow_methods=["GET", "POST"], allow_headers=["Content-Type"])
-
 # One copilot + a lock (DuckDB connection is shared; serialize access for the demo).
 _copilot: Copilot | None = None
 _lock = threading.Lock()
 _personas: set[str] = set()
 
 
-@app.on_event("startup")
-def _startup():
+@asynccontextmanager
+async def lifespan(_app):
     global _copilot, _personas
     _copilot = Copilot(FIXTURE)
     _personas = {p["persona_id"] for p in _copilot.personas()}
     log.info("copilot ready on fixture=%s as_of=%s personas=%d",
              FIXTURE, _copilot.engine.as_of, len(_personas))
+    yield
+    _copilot.close()
+
+
+app = FastAPI(title="Governed Analytics Copilot", version="1.0",
+              docs_url="/api/docs", redoc_url=None, lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS,
+                   allow_methods=["GET", "POST"], allow_headers=["Content-Type"])
 
 
 # --- security headers + rate limit ----------------------------------------------------
