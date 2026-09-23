@@ -100,6 +100,15 @@ LLM planner instead, set a provider + key (`COPILOT_LLM_PROVIDER=anthropic` with
 `ANTHROPIC_API_KEY`, or `azure_openai` with the `AZURE_OPENAI_*` vars) — the plan is
 validated identically, so the trust boundary is unchanged.
 
+## Deploy (Render)
+
+A [`render.yaml`](render.yaml) blueprint is included. On [render.com](https://render.com):
+**New → Blueprint → connect this repo**. Render builds the synthetic fixture at build time
+(the repo stays clean) and starts the server; the health check is `/api/health`. The free
+tier sleeps after ~15 min idle (the first request then cold-starts); upgrade the service to
+**Starter** for an always-on link. The app binds `0.0.0.0:$PORT` and is stateless
+(read-only DuckDB), so it also runs unchanged on Railway, Fly.io, or Azure App Service.
+
 ## Repository layout
 
 ```

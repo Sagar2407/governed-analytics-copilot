@@ -1,0 +1,18 @@
+# Render Blueprint. On render.com: New > Blueprint > connect this repo.
+# Build generates the synthetic fixture (repo stays clean); start runs uvicorn on $PORT.
+services:
+  - type: web
+    name: governed-analytics-copilot
+    runtime: python
+    plan: free                       # free sleeps after ~15 min idle; use "starter" for always-on
+    region: oregon
+    buildCommand: "pip install -r requirements.txt && python run.py --scale medium --fixtures a=42"
+    # If the free instance runs low on memory, change --scale medium to --scale small.
+    startCommand: "uvicorn app.api:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.6"
+      - key: COPILOT_FIXTURE
+        value: data/fixture_a
