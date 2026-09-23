@@ -1,0 +1,37 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-and-eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Build both fixtures
+        run: python run.py --scale small
+
+      - name: Unit + integration tests
+        run: python -m pytest -q
+
+      - name: Correctness + governance eval (release gate)
+        # Exits non-zero if numeric correctness < 100% or any RLS leak is found.
+        run: python -m evals.run --fixtures data/fixture_a data/fixture_b
+
+      - name: Upload eval report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report
+          path: evals/report.md
