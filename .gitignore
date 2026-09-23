@@ -1,6 +1,10 @@
 # Generated fixtures (rebuild with `python run.py`)
 data/
 
+# Machine-readable eval output (regenerate with `python -m evals.run`);
+# the human-readable evals/report.md is committed as evidence.
+evals/report.json
+
 # Python
 __pycache__/
 *.pyc

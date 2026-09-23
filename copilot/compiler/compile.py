@@ -138,10 +138,11 @@ def _agg_select(met: Metric) -> tuple[str, str]:
         return sel, "ratio"
     vc = f"f.{met.value_column}"
     if met.agg == "sum":
-        inner = f"SUM({vc}) * {met.value_multiplier}" if met.value_multiplier != 1.0 else f"SUM({vc})"
+        base = f"COALESCE(SUM({vc}), 0)"
+        inner = f"{base} * {met.value_multiplier}" if met.value_multiplier != 1.0 else base
         return f"ROUND({inner}, 2) AS value", "currency"
     if met.agg == "avg":
-        return f"ROUND(AVG({vc}), 2) AS value", "currency"
+        return f"ROUND(COALESCE(AVG({vc}), 0), 2) AS value", "currency"
     if met.agg == "count_rows":
         return "COUNT(*) AS value", "count"
     if met.agg == "count_distinct_account":
