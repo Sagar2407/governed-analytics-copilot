@@ -1,0 +1,6 @@
+-r requirements.txt
+pytest>=8.0
+
+# Optional, only needed to run the LLM planner (the HeuristicPlanner needs neither):
+#   anthropic>=0.40     # provider=anthropic (Claude)
+#   openai>=1.40        # provider=azure_openai

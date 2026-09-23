@@ -1,0 +1,9 @@
+# Normalize line endings: LF in the repo and in working copies.
+* text=auto eol=lf
+
+# Binary artifacts (never diff/normalize)
+*.duckdb binary
+*.parquet binary
+*.png binary
+*.jpg binary
+*.ico binary
