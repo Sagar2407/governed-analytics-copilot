@@ -5,3 +5,7 @@ duckdb>=1.0
 pyarrow>=14.0
 faker>=25.0
 PyYAML>=6.0
+
+# Web app (app/) -- optional; the generator, copilot engine, and evals don't need these
+fastapi>=0.110
+uvicorn[standard]>=0.29

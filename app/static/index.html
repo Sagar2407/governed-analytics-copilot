@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Governed Analytics Copilot</title>
+  <!-- No inline scripts/styles: CSP is default-src 'self'. All assets self-hosted. -->
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="dot"></span>
+      <div>
+        <h1>Governed Analytics Copilot</h1>
+        <p class="sub">Ask in plain English. Answers are governed, cited, and row-level scoped.</p>
+      </div>
+    </div>
+    <div class="persona">
+      <label for="persona">Viewing as</label>
+      <select id="persona" aria-label="Persona"></select>
+      <span id="as-of" class="asof"></span>
+    </div>
+  </header>
+
+  <main>
+    <section id="scope-banner" class="banner" hidden></section>
+
+    <form id="ask-form" class="ask">
+      <input id="question" type="text" autocomplete="off"
+             placeholder="e.g. What is our ARR in EMEA?" maxlength="500" />
+      <button id="ask-btn" type="submit">Ask</button>
+    </form>
+
+    <div id="examples" class="examples" aria-label="Example questions"></div>
+
+    <section id="result" class="result" hidden>
+      <div id="status" class="status"></div>
+      <div id="answer" class="answer"></div>
+      <div id="rationale" class="rationale"></div>
+      <div id="candidates" class="candidates"></div>
+      <div id="table-wrap" class="table-wrap"></div>
+      <details id="lineage" class="lineage">
+        <summary>Lineage &amp; SQL</summary>
+        <dl id="lineage-body"></dl>
+        <pre class="sql"><code id="sql"></code></pre>
+      </details>
+    </section>
+
+    <p class="footnote">
+      The model proposes a validated query plan &mdash; it never writes SQL and never sees
+      data it isn&rsquo;t entitled to. Row-level security is enforced in the data layer, so
+      changing persona changes what the same question returns. (Demo: persona is selectable;
+      in production it comes from your authenticated session.)
+    </p>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
