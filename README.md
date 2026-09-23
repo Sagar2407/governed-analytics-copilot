@@ -1,6 +1,9 @@
 # Governed Analytics Copilot
 
 [![ci](https://github.com/Sagar2407/governed-analytics-copilot/actions/workflows/ci.yml/badge.svg)](https://github.com/Sagar2407/governed-analytics-copilot/actions/workflows/ci.yml)
+[![live demo](https://img.shields.io/badge/live%20demo-online-brightgreen)](https://governed-analytics-copilot.onrender.com/)
+
+**▶ Live demo: [governed-analytics-copilot.onrender.com](https://governed-analytics-copilot.onrender.com/)** &nbsp;·&nbsp; try the persona switcher and watch the same question re-scope. <sub>(free tier — the first load after idle can take ~40s to wake)</sub>
 
 Ask a business question in plain English; get a **correct, reproducible answer with full
 lineage** — where **row-level access control is enforced in the data layer**, so even a
