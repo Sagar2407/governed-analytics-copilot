@@ -102,8 +102,10 @@ validated identically, so the trust boundary is unchanged.
 
 ## Deploy (Render)
 
-A [`render.yaml`](render.yaml) blueprint is included. On [render.com](https://render.com):
-**New → Blueprint → connect this repo**. Render builds the synthetic fixture at build time
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Sagar2407/governed-analytics-copilot)
+
+A [`render.yaml`](render.yaml) blueprint is included. Click the button above, or on
+[render.com](https://render.com): **New → Blueprint → connect this repo**. Render builds the synthetic fixture at build time
 (the repo stays clean) and starts the server; the health check is `/api/health`. The free
 tier sleeps after ~15 min idle (the first request then cold-starts); upgrade the service to
 **Starter** for an always-on link. The app binds `0.0.0.0:$PORT` and is stateless
